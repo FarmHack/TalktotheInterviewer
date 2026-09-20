@@ -60,4 +60,4 @@ stay empty for the whole interview.
 ---
 
 Part of the [Farm Hack](https://farmhack.org) box toolkit. GPL-3.0-or-later.
-Built 2026-09-20 · 475 KB, one file.
+Built 2026-09-20 · 558 KB, one file.
