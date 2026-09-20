@@ -1239,7 +1239,7 @@ body { padding-bottom: 40px; }
       <em>question-sets</em> library. The answers are not: questions federate, answers do not.</p>
     <p>Saving gives you two files &mdash; the recording, and a sidecar holding consent, your marks
       and your notes. Any Farm Hack box can ingest the pair as they are, and transcribe them
-      locally. Built 2026-09-19 from question-set snapshot 2026-09-19, library fd7374a + uncommitted changes.</p>
+      locally. Built 2026-09-20 from question-set snapshot 2026-09-20, library fd7374a + uncommitted changes.</p>
   </footer>
 </div>
 
@@ -1969,10 +1969,42 @@ body { padding-bottom: 40px; }
      per-question feedback. The sidecar is the same JSON the box's
      /longform/:id/complete endpoint accepts, so a file saved here can be
      ingested by any Farm Hack box later without conversion. */
+  /* ⛔ NEVER REVOKE A BLOB URL ON A TIMER. This used to revoke after four
+     seconds, which is fine only if the browser saves immediately. Firefox set
+     to "Always ask where to save files" opens a dialog instead: the person
+     picks a folder, takes longer than four seconds doing it, presses Save — and
+     the URL is already dead. Firefox then reports
+
+        "can't find the file at blob:… It either doesn't exist or the path is
+         incorrect"
+
+     which reads like a broken link and is actually a recording being thrown
+     away. This is the FALLBACK path — the one that has to work when the network
+     one does not — so it must not have a stopwatch on it.
+
+     The URLs are kept for the life of the page and released when it goes away.
+     One interview is a few megabytes; holding it until the tab closes costs
+     nothing next to losing it. */
+  var liveUrls = [];
+  addEventListener('pagehide', function () {
+    liveUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+    liveUrls = [];
+  });
+
   function save(blob, name) {
-    var u = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = u; a.download = name; document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 4000);
+    // A zero-length blob produces a download that looks successful and is not.
+    if (!blob || !blob.size) {
+      FHBToast && FHBToast('That file came out empty — do NOT close this tab. Press Send to a box instead.');
+      return false;
+    }
+    var u = URL.createObjectURL(blob);
+    liveUrls.push(u);
+    window.__lastUrls = liveUrls;        // so a test can prove they stay alive
+    var a = document.createElement('a');
+    a.href = u; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { try { a.remove(); } catch (e) {} }, 1000);   // the ANCHOR, not the URL
+    return true;
   }
   var pending = null, savedAudio = false, savedJson = false, sessionId = null;
 
@@ -2065,11 +2097,14 @@ body { padding-bottom: 40px; }
         if (window.FHBConsole && FHBConsole.refreshCustody) FHBConsole.refreshCustody(true);
         else if (root) window.FHBSink.renderCustodyAction(root);
       };
+      /* Only mark a file saved if the save actually started. "Remove from this
+         browser" is gated on both files being saved, and a button that lies
+         about it is how the only copy gets deleted. */
       d.querySelector('#saAudio').addEventListener('click', function () {
-        save(pending.audio, pending.audioName); savedAudio = true; bump();
+        if (save(pending.audio, pending.audioName)) { savedAudio = true; bump(); }
       });
       d.querySelector('#saJson').addEventListener('click', function () {
-        save(pending.json, pending.jsonName); savedJson = true; bump();
+        if (save(pending.json, pending.jsonName)) { savedJson = true; bump(); }
       });
       d.querySelector('#saSend').addEventListener('click', sendToBox);
 
@@ -2250,9 +2285,15 @@ body { padding-bottom: 40px; }
               'that does not resolve.</li>' +
               '<li><b>The address is http and this page is https</b>, which browsers block.</li>' +
               '</ul>' +
-              'If you are sitting at the box itself, the simplest fix is to use the copy of this ' +
-              'tool the box serves, at <b>' + FHBUI.esc(base) + '/talk-to-the/</b>, and send to ' +
-              'that same address — then nothing is crossing origins and none of the above applies.';
+              '<b>For the interview you have right now: save the two files above.</b> They are ' +
+              'safe in this browser and the box can take the pair as they are. Do not switch ' +
+              'pages first &mdash; this recording lives in THIS page and does not follow you to ' +
+              'another address.' +
+              '<br><br>Next time, if you are at the box, start from the copy the box serves: ' +
+              '<a href="' + FHBUI.esc(base) + '/talk-to-the/" target="_blank" rel="noopener">' +
+              FHBUI.esc(base) + '/talk-to-the/</a> &mdash; then the send is same-origin and none ' +
+              'of the above can happen. From a DIFFERENT machine on the tailnet this page is ' +
+              'fine; it is only sending from the box to itself that trips the certificate.';
       }
       say('bad', '<b>It did not go.</b><br>' + why +
         '<br><br>Your copy is untouched. You can press Send again — the box keeps the parts it ' +
