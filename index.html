@@ -1118,15 +1118,27 @@ body { padding-bottom: 40px; }
             vertical-align: middle; background: var(--warn, #9A5B00); color: #fff; }
 .iv-set-short { display: block; font-size: .84rem; line-height: 1.45; color: var(--text);
                 margin: 3px 0 2px; }
-.iv-review { display: inline-block; margin: 3px 0 2px 52px; padding: 3px 0;
+.iv-review { display: inline-block; margin: 3px 0 2px 148px; padding: 3px 0;
              font: inherit; font-size: .8rem; color: var(--brand);
              background: none; border: 0; cursor: pointer; text-align: start; }
 .iv-review:hover { text-decoration: underline; }
 .iv-review:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 @media (max-width: 460px) { .iv-review { margin-inline-start: 0; } }
+@media (min-width: 461px) and (max-width: 720px) { .iv-review { margin-inline-start: 120px; } }
 
-/* An organisation's own mark on a set card, where it has one. */
-.iv-logo { width: 60px; height: 60px; object-fit: contain; display: block; }
+/* An organisation's own mark on a set card, where it has one.
+   ⭐ These are WORDMARKS, three to seven times wider than they are tall, and a
+   60px square let the widest of them render about eight pixels high — present,
+   unreadable, and therefore doing none of the work a logo is there to do.
+   The slot is fixed so that cards with a mark and cards with a sprite icon
+   still line their text up, and .iv-review's indent below tracks it. */
+.iv-set-icon { flex: 0 0 120px; }
+.iv-logo { width: 120px; max-height: 54px; object-fit: contain; display: block;
+           margin-inline: auto; }
+@media (max-width: 460px) {
+  .iv-set-icon { flex-basis: 92px; }
+  .iv-logo { width: 92px; max-height: 42px; }
+}
 
 /* ── choosing a language before choosing a set ──────────────────────────────── */
 .sa-lang { border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -1178,6 +1190,14 @@ body { padding-bottom: 40px; }
 .sr2-note { width: 100%; }
 /* The three ways home, always in view — a reviewer should never have to hunt
    for how to send what they have just written. */
+.sr2-send { margin: 16px 0 4px; padding: 12px 14px; border: 1.5px solid var(--line);
+            border-radius: 12px; background: var(--surface); }
+.sr2-send > summary { cursor: pointer; font-weight: 700; font-size: .9rem; }
+.sr2-send > summary::marker { color: var(--text-dim); }
+.sr2-send .sa-lab { display: block; margin-top: 10px; }
+.sr2-send .sa-in { width: 100%; box-sizing: border-box; }
+.sr2-opt { font-weight: 400; color: var(--text-dim); }
+
 .sr2-foot { position: sticky; bottom: 0; z-index: 40; display: flex; gap: 9px; flex-wrap: wrap;
             align-items: center; max-width: 940px; margin: 0 auto;
             padding: 11px 20px calc(11px + env(safe-area-inset-bottom, 0px));
@@ -1385,15 +1405,41 @@ body { padding-bottom: 40px; }
     <label class="sr2-who"><span>Anything about the set as a whole?</span>
       <textarea id="sr2Set" class="field" rows="3"
         placeholder="What is missing, what is in the wrong order, what would you cut"></textarea></label>
+
+    <!-- ⛔ THE RESULT LIVES ABOVE THE STICKY BAR, NOT AFTER IT. It used to sit
+         after .sr2-foot in the document, and .sr2-foot is position:sticky —
+         so every message this screen produces rendered at the very bottom of a
+         long scrolling page, behind and below the buttons that produced it.
+         Press Send, nothing moves, nothing appears: the operator reported the
+         buttons as "not live", and they were right about the experience even
+         though every function ran. A reply you cannot see is not a reply. -->
+    <div id="sr2Result" class="sa-result" hidden></div>
+
+    <!-- The same two fields, in the same order, with the same help as the
+         interview's own send screen — because it is the same decision, and a
+         person who has sent one recording should not have to learn a second
+         idiom to send a comment. Replaces two window.prompt() dialogs, which
+         some browsers suppress outright and none of which can be corrected
+         once dismissed. -->
+    <details id="sr2Box" class="sr2-send">
+      <summary>Send it to a box</summary>
+      <label class="sa-lab" for="sr2Base">Address of the box</label>
+      <input class="sa-in" id="sr2Base" type="url" spellcheck="false" autocapitalize="off"
+             placeholder="https://farmhackbox-04-1.tail272452.ts.net:8444">
+      <label class="sa-lab" for="sr2CodeIn">Code <span class="sr2-opt">&mdash; only if the box asks for one</span></label>
+      <input class="sa-in sa-code" id="sr2CodeIn" type="text" spellcheck="false"
+             autocapitalize="characters" placeholder="XXXXX-XXXXX" maxlength="11">
+      <p class="pv-note">Question feedback is not sensitive, so most boxes take it without a code.
+        If yours refuses, ask whoever runs it for a one-time code &mdash; the same kind an interview
+        uses, issued from <i>Listening &amp; Research &rarr; Upload Codes</i>.</p>
+    </details>
   </div>
   <div class="sr2-foot">
     <span id="sr2Count" class="sr2-count">nothing yet</span>
     <button id="sr2Send" class="btn primary" type="button">Send to a box</button>
-    <button id="sr2Code" class="btn ghost" type="button">Send with a code&hellip;</button>
     <button id="sr2Mail" class="btn ghost" type="button">Email it</button>
     <button id="sr2Save" class="btn ghost" type="button">Save as a file</button>
   </div>
-  <div id="sr2Result" class="sa-result" hidden></div>
 </main>
 
 <main id="lfconsole" class="view">
@@ -4448,7 +4494,12 @@ body { padding-bottom: 40px; }
   function sendReview(mode) {
     var body = reviewPayload();
     var out = document.getElementById('sr2Result');
-    var say = function (cls, html) { out.hidden = false; out.className = 'sa-result ' + cls; out.innerHTML = html; };
+    var say = function (cls, html) {
+      out.hidden = false; out.className = 'sa-result ' + cls; out.innerHTML = html;
+      // The button that caused this is in a sticky bar at the foot of a long
+      // page; without this the reply can still be a screen away.
+      try { out.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    };
     if (!Object.keys(body.answers).length && !(body.note || '').trim()) {
       say('bad', 'Rate or comment on at least one question first.');
       return;
@@ -4510,25 +4561,34 @@ body { padding-bottom: 40px; }
       return;
     }
 
-    var base = '', code = '';
-    if (mode === 'code') {
-      base = window.prompt('Address of the box to send this to', reviewBox || 'https://');
-      if (!base) return;
-      base = base.trim().replace(/\/+$/, '');
-      if (!/^https?:\/\//.test(base)) { say('bad', 'The address needs to start with https://'); return; }
-      code = (window.prompt('One-time code, from whoever runs that box\n\nIt works once, for one piece of work.', '') || '').trim().toUpperCase();
-      if (!/^[A-Z0-9]{5}-[A-Z0-9]{5}$/.test(code)) { say('bad', 'A code looks like XXXXX-XXXXX.'); return; }
-      reviewBox = base;
-      try { localStorage.setItem('fhb-review-base', base); } catch (e) {}
-    } else {
-      // Direct: only meaningful when a box is serving this page.
-      if (!/^https?:$/.test(location.protocol)) {
-        say('bad', 'This page is not being served by a box, so there is nowhere to send it directly. ' +
-                   'Use <b>Send with a code</b>, or save the file.');
-        return;
-      }
-      base = location.origin;
+    /* ⭐ ONE SEND, TWO OPTIONAL FIELDS — the interview's shape, not a second
+       idiom. There used to be two buttons: a "direct" one that silently
+       assumed location.origin, and a "with a code" one behind two prompts.
+       On a page served from GitHub Pages the direct one passed its own
+       protocol check and POSTed to github.io/api/… — a 404 dressed up as "it
+       did not go". The address is now always visible and always editable. */
+    var baseEl = document.getElementById('sr2Base');
+    var codeEl = document.getElementById('sr2CodeIn');
+    var base = (baseEl.value || '').trim().replace(/\/+$/, '');
+    var code = (codeEl.value || '').trim().toUpperCase();
+
+    if (!base) {
+      var det = document.getElementById('sr2Box');
+      if (det) det.open = true;
+      say('bad', 'Tell it which box to send to \u2014 the address is just above. ' +
+                 'Or use <b>Email it</b> or <b>Save as a file</b>, which need no box at all.');
+      if (baseEl.focus) baseEl.focus();
+      return;
     }
+    if (!/^https?:\/\//.test(base)) {
+      say('bad', 'The address needs to start with https://'); return;
+    }
+    if (code && !/^[A-Z0-9]{5}-[A-Z0-9]{5}$/.test(code)) {
+      say('bad', 'A code looks like XXXXX-XXXXX. Leave it empty if the box does not ask for one.');
+      return;
+    }
+    reviewBox = base;
+    try { localStorage.setItem('fhb-review-base', base); } catch (e) {}
 
     var url = code ? base + '/api/interviews/ingest/' + encodeURIComponent(code) + '/review'
                    : base + '/api/interviews/review';
@@ -4561,9 +4621,21 @@ body { padding-bottom: 40px; }
     var go = function () {
       on('sr2Back', closeReview);
       on('sr2Send', function () { sendReview('direct'); });
-      on('sr2Code', function () { sendReview('code'); });
       on('sr2Mail', function () { sendReview('mail'); });
       on('sr2Save', function () { sendReview('save'); });
+      /* Prefill the address the same way the interview does: a page served over
+         http(s) came from a box, and that box is the sensible default — it also
+         makes the send same-origin, which sidesteps the certificate-exception
+         failure that reports only as "NetworkError". A remembered address wins,
+         since somebody who typed one meant it. GitHub Pages is the exception
+         this guards: it is served over https and is emphatically not a box, so
+         its origin is never offered. */
+      var baseEl = document.getElementById('sr2Base');
+      if (baseEl) {
+        var origin = /^https?:$/.test(location.protocol) &&
+                     !/\.github\.io$/i.test(location.hostname) ? location.origin : '';
+        baseEl.value = reviewBox || origin || '';
+      }
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
     else go();
