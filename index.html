@@ -1190,6 +1190,13 @@ body { padding-bottom: 40px; }
 .sr2-note { width: 100%; }
 /* The three ways home, always in view — a reviewer should never have to hunt
    for how to send what they have just written. */
+.sr2-out { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.sr2-out > summary { cursor: pointer; font-size: .82rem; font-weight: 700; color: var(--text-dim); }
+.sr2-out-row { display: flex; align-items: center; gap: 10px; margin: 9px 0 6px; }
+.sr2-out-name { font-size: .78rem; color: var(--text-dim); word-break: break-all; }
+.sr2-out-t { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular,
+             Menlo, Consolas, monospace; font-size: .76rem; line-height: 1.45; }
+
 .sr2-send { margin: 16px 0 4px; padding: 12px 14px; border: 1.5px solid var(--line);
             border-radius: 12px; background: var(--surface); }
 .sr2-send > summary { cursor: pointer; font-weight: 700; font-size: .9rem; }
@@ -4491,6 +4498,48 @@ body { padding-bottom: 40px; }
 
   /* The same three routes a recording takes. Deliberately the same wording and
      the same order, because they are the same decision. */
+  /* ⛔ NEITHER SAVE NOR EMAIL CAN BE VERIFIED FROM JAVASCRIPT, so neither may
+     be the only way out. An <a download> click that a browser blocks, or a
+     mailto: with no handler registered — which is the ordinary case on a Linux
+     desktop, and on any machine where mail lives in a browser tab — both do
+     absolutely nothing and report absolutely nothing. The page then says "Saved"
+     or "Your mail program should be opening" over a dead end, which is worse
+     than an error: the reviewer believes their work left the page.
+
+     Headless Chrome cannot see this. It accepts the download, has no mail
+     client to fail to open, and reports every button working — which is exactly
+     what my testing said while the operator was telling me twice that these
+     buttons do nothing. So: always put the content on the page, selectable, with
+     a copy button. If the download or the mail client worked, this is ignorable.
+     If it did not, the review is still right there and one click from a reply. */
+  function fallbackBox(label, text, filename) {
+    var id = 'sr2Out' + Date.now();
+    return '<details class="sr2-out" open><summary>' + FHBUI.esc(label) + '</summary>' +
+      '<div class="sr2-out-row">' +
+        '<button type="button" class="btn ghost sr2-copy" data-for="' + id + '">Copy it</button>' +
+        (filename ? '<span class="sr2-out-name">' + FHBUI.esc(filename) + '</span>' : '') +
+      '</div>' +
+      '<textarea id="' + id + '" class="sr2-out-t field" rows="10" spellcheck="false" readonly>' +
+      FHBUI.esc(text) + '</textarea></details>';
+  }
+
+  // One delegated handler: the boxes are written into innerHTML after this runs.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('.sr2-copy');
+    if (!b) return;
+    var t = document.getElementById(b.dataset.for);
+    if (!t) return;
+    t.focus(); t.select();
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (err) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t.value).then(function () {
+        b.textContent = 'Copied'; }, function () {});
+    }
+    if (done) b.textContent = 'Copied';
+    setTimeout(function () { b.textContent = 'Copy it'; }, 2500);
+  });
+
   function sendReview(mode) {
     var body = reviewPayload();
     var out = document.getElementById('sr2Result');
@@ -4543,21 +4592,32 @@ body { padding-bottom: 40px; }
           'Use <b>Save as a file</b> and attach it instead.</p>');
         return;
       }
-      location.href = mail;
-      say('good', '<p class="sa-plain">Your mail program should be opening.</p>' +
-        '<p class="pv-note">Send it to whoever curates this set. The review is readable in the ' +
-        'message itself, and a box can ingest the message as it stands — question feedback is ' +
-        'not sensitive, so it does not need a code or a box to reach.</p>');
+      var opened = false;
+      try { location.href = mail; opened = true; } catch (e) {}
+      say('good', '<p class="sa-plain">' +
+        (opened ? 'If a mail program is set up on this machine, it is opening now.'
+                : 'This browser would not open a mail program.') + '</p>' +
+        '<p class="pv-note">Plenty of machines have no mail program registered — web mail in ' +
+        'another tab counts as none — and when that happens nothing opens and nothing says so. ' +
+        'The whole message is below either way: copy it into a reply and send it to whoever ' +
+        'curates this set. A box can ingest the message as it stands, because the machine-readable ' +
+        'part travels at the bottom. Question feedback is not sensitive, so it needs no code.</p>' +
+        fallbackBox('The message, ready to paste', lines.join('\n'), ''));
       return;
     }
 
     if (mode === 'save') {
       var name = body.slug + '@' + body.version + '-review.json';
-      var blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
+      var text = JSON.stringify(body, null, 2);
+      var blob = new Blob([text], { type: 'application/json' });
       if (!window.FHBSave(blob, name)) return;   // refuses an empty blob and says so
-      say('good', '<p class="sa-plain">Saved as <b>' + FHBUI.esc(name) + '</b>.</p>' +
-        '<p class="pv-note">Any Farm Hack box can take this file as it is:<br>' +
-        '<code>farmhack-ingest-pair.js ' + FHBUI.esc(name) + ' --via email</code></p>');
+      say('good', '<p class="sa-plain">Saved as <b>' + FHBUI.esc(name) + '</b> — look in ' +
+        'your downloads.</p>' +
+        '<p class="pv-note">If nothing arrived, the browser blocked the download without saying ' +
+        'so. Copy the text below into a file named <b>' + FHBUI.esc(name) + '</b> instead; it is ' +
+        'the same thing. Any Farm Hack box takes it as it is:<br>' +
+        '<code>farmhack-ingest-pair.js ' + FHBUI.esc(name) + ' --via email</code></p>' +
+        fallbackBox('The file, in case the download did not arrive', text, name));
       return;
     }
 
